@@ -1,24 +1,103 @@
 import numpy as np
+import pandas as pd
 import talib
 from typing import List
 
-def getOperateDirection(histPrice, stage: int):
+def getOperateDirection(histPrice: pd.DataFrame, *, stage: int, offset: int):
     """
     获取当前均线方向
     """
     MAX = talib.MA(histPrice["close"], stage)
     MAX_2 = talib.MA(histPrice["close"], stage // 2)
     MAX_4 = talib.MA(histPrice["close"], stage // 4)
-    maxGapPercentage: float = 0.02
-    if MAX_4.iloc[-2] > MAX.iloc[-2] and MAX_2.iloc[-2] > MAX.iloc[-2]:
+    compareIdx = -2 - offset
+    if abs(compareIdx) > len(histPrice):
+        return 0
+    if MAX_4.iloc[compareIdx] > MAX.iloc[compareIdx] and MAX_2.iloc[compareIdx] > MAX.iloc[compareIdx]:
         return 1
-    elif MAX_4.iloc[-2] < MAX.iloc[-2] and MAX_2.iloc[-2] < MAX.iloc[-2]:
+    elif MAX_4.iloc[compareIdx] < MAX.iloc[compareIdx] and MAX_2.iloc[compareIdx] < MAX.iloc[compareIdx]:
         return -1
-    else:
-        gapPercentage = abs((MAX_4.iloc[-2] - MAX.iloc[-2]) / MAX.iloc[-2])
-        if gapPercentage < maxGapPercentage:
-            return 1 if MAX_2.iloc[-2] > MAX.iloc[-2] else -1
     return 0
+
+def getPenMaxMinPrice(histPrice: pd.DataFrame, startIdx: int, endIdx: int, direct: int, nearCheckDelta: int):
+    if direct == 1:
+        lowMinPrice = histPrice.iloc[startIdx: endIdx]["low"].min()
+        lowMinPriceIdx = histPrice.iloc[startIdx: endIdx]["low"].idxmin()
+        nesarLowMinPrice = histPrice[lowMinPriceIdx - nearCheckDelta: lowMinPriceIdx]["low"].min()
+        if nesarLowMinPrice < lowMinPrice:
+            lowMinPrice = nesarLowMinPrice
+            lowMinPriceIdx = histPrice[lowMinPriceIdx - nearCheckDelta: lowMinPriceIdx]["low"].idxmin()
+        return {
+            "maxMinPrice": lowMinPrice,
+            "maxMinPriceIdx": lowMinPriceIdx,
+            "type": "buttom" if direct == 1 else "top",
+            "datetime": histPrice.iloc[lowMinPriceIdx]["datetime"]
+        }
+    elif direct == -1:
+        highMaxPrice = histPrice.iloc[startIdx: endIdx]["high"].max()
+        highMaxPriceIdx = histPrice.iloc[startIdx: endIdx]["high"].idxmax()
+        nesarHighMaxPrice = histPrice[highMaxPriceIdx - nearCheckDelta: highMaxPriceIdx]["high"].max()
+        if nesarHighMaxPrice > highMaxPrice:
+            highMaxPrice = nesarHighMaxPrice
+            highMaxPriceIdx = histPrice[highMaxPriceIdx - nearCheckDelta: highMaxPriceIdx]["high"].idxmax()
+        return {
+            "maxMinPrice": highMaxPrice,
+            "maxMinPriceIdx": highMaxPriceIdx,
+            "type": "buttom" if direct == 1 else "top",
+            "datetime": histPrice.iloc[highMaxPriceIdx]["datetime"]
+        }
+    else:
+        raise ValueError("direct的值不可能为0，请检查输入数据")
+
+def buildPens(histPrice: pd.DataFrame, *, type: str):
+    """
+    根据历史价格数据和类型构建画笔
+
+    参数:
+    histPrice : pd.DataFrame
+        包含历史价格数据的DataFrame。
+    type : str
+        类型标识符，可以是"A0", "A1", 或 "A2"。
+
+    返回:
+    int
+        由函数计算得出的整数值。
+    """
+    if type not in ["A0", "A1", "A2"]:
+        raise ValueError("Type must be one of 'A0', 'A1', or 'A2'")
+    mapType2Col = {
+        "A0": "a0Direct",
+        "A1": "a1Direct",
+        "A2": "a2Direct",
+    }
+    mapNearCheckDelta = {
+        "A0": 10,
+        "A1": 40,
+        "A2": 160,
+    }
+    directColData = histPrice[mapType2Col[type]]
+    penDirect = 0
+    penSwitchList = []
+    for i, curDirect in enumerate(directColData):
+        if curDirect == 1 and penDirect != 1:
+            penDirect = 1
+            penSwitchList.append((i, penDirect))
+        if curDirect == -1 and penDirect != -1:
+            penDirect = -1
+            penSwitchList.append((i, penDirect))
+    penPointList = []
+    for i, curPen in enumerate(penSwitchList):
+        if i == 0:
+            priceObj = getPenMaxMinPrice(histPrice, 0, curPen[0], curPen[1], mapNearCheckDelta[type])
+            penPointList.append(priceObj)
+        else:
+            prePen = penSwitchList[i - 1]
+            priceObj = getPenMaxMinPrice(histPrice, prePen[0], curPen[0], curPen[1], mapNearCheckDelta[type])
+            penPointList.append(priceObj)
+        if i == len(penSwitchList) - 1:
+            priceObj = getPenMaxMinPrice(histPrice, curPen[0], len(histPrice), 1 if curPen[1] == -1 else -1, mapNearCheckDelta[type])
+            penPointList.append(priceObj)
+    return penPointList
 
 def MACD(data, fast_period=10, slow_period=20, singal_period=5):
     fastMA = talib.MA(data, fast_period)
@@ -33,7 +112,6 @@ def checkMACDCross(histPrice, stage: int):
     crossType为1表示金叉，为-1表示死叉，为0表示没有
     diffZeroAxis为1表示在DIFF>10时出现的，为-1表示在DIFF<-10出现的，为0表示在[-10,10]区间出现的
     """
-    # DIFF, DEA, _MACD = talib.MACD(histPrice["Close"], stage // 2, stage, stage // 4)
     DIFF, DEA, _MACD = MACD(histPrice["close"], stage // 2, stage, stage // 4)
     if len(DIFF) < 2 or len(DEA) < 2:
         return (0, 0)

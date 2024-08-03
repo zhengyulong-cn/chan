@@ -1,6 +1,6 @@
 from enum import Enum
 
-FutureInstruments = [
+FUTURE_INSTRUMENTS = [
     # "JM0",
     # "RB0",
     # "SM0",
