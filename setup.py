@@ -11,11 +11,14 @@ class Future:
         self.a0PenPointList = []
         self.a1PenPointList = []
         self.a2PenPointList = []
+        self.a0CentralList = []
+        self.a1CentralList = []
         self.analysis()
 
     def analysis(self):
         self.analysisDirect()
-        self.analysisPen()
+        self.analysisChanPens()
+        self.analysisChanCentral()
 
     def analysisDirect(self):
         self.histPrice["a0Direct"] = None
@@ -27,10 +30,14 @@ class Future:
             self.histPrice.loc[i, "a1Direct"] = core.analysis.getOperateDirection(self.histPrice, stage=80, offset=offset)
             self.histPrice.loc[i, "a2Direct"] = core.analysis.getOperateDirection(self.histPrice, stage=320, offset=offset)
     
-    def analysisPen(self):
-        self.a0PenPointList = core.analysis.buildPens(self.histPrice, type="A0")
-        self.a1PenPointList = core.analysis.buildPens(self.histPrice, type="A1")
-        self.a2PenPointList = core.analysis.buildPens(self.histPrice, type="A2")
+    def analysisChanPens(self):
+        self.a0PenPointList = core.analysis.buildChanPens(self.histPrice, type="A0")
+        self.a1PenPointList = core.analysis.buildChanPens(self.histPrice, type="A1")
+        self.a2PenPointList = core.analysis.buildChanPens(self.histPrice, type="A2")
+
+    def analysisChanCentral(self):
+        self.a0CentralList = core.analysis.buildChanCentral(penPointList=self.a0PenPointList, bigPenPointList=self.a1PenPointList)
+        self.a1CentralList = core.analysis.buildChanCentral(penPointList=self.a1PenPointList, bigPenPointList=self.a2PenPointList)
 
 def onTick():
     symbol = FUTURE_INSTRUMENTS[0]
@@ -41,11 +48,16 @@ def onTick():
         "a1PenPointList": future.a1PenPointList,
         "a2PenPointList": future.a2PenPointList,
     }
+    chanCentral = {
+        "a0CentralList": future.a0CentralList,
+        "a1CentralList": future.a1CentralList,
+    }
     kLineRender = core.ui.KLineRender(
         symbol,
         future.histPrice,
         str(KLineLevel.Level_15M.value),
         chanMarkLine,
+        chanCentral,
     )
     kLineRender.draw()
 

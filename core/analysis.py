@@ -49,19 +49,17 @@ def getPenMaxMinPrice(histPrice: pd.DataFrame, startIdx: int, endIdx: int, direc
     else:
         raise ValueError("direct的值不可能为0，请检查输入数据")
 
-def buildPens(histPrice: pd.DataFrame, *, type: str):
+def buildChanPens(histPrice: pd.DataFrame, *, type: str):
     """
     根据历史价格数据和类型构建画笔
 
     参数:
-    histPrice : pd.DataFrame
-        包含历史价格数据的DataFrame。
-    type : str
-        类型标识符，可以是"A0", "A1", 或 "A2"。
 
-    返回:
-    int
-        由函数计算得出的整数值。
+    histPrice : pd.DataFrame 包含历史价格数据的DataFrame。
+
+    type : str 类型标识符，可以是"A0", "A1", 或 "A2"。
+
+    返回: penPointList 由函数计算得出的笔的点位
     """
     if type not in ["A0", "A1", "A2"]:
         raise ValueError("Type must be one of 'A0', 'A1', or 'A2'")
@@ -98,6 +96,97 @@ def buildPens(histPrice: pd.DataFrame, *, type: str):
             priceObj = getPenMaxMinPrice(histPrice, curPen[0], len(histPrice), 1 if curPen[1] == -1 else -1, mapNearCheckDelta[type])
             penPointList.append(priceObj)
     return penPointList
+
+def mergeCentralList(centralList):
+    """
+    将有重叠的中枢进行合并
+    """
+    # 保证按照最左侧坐标排序正确
+    centralList.sort(key=lambda x: (x['idxRange'][0], x['priceRange'][0]))
+    mergedList = []
+    for interval in centralList:
+        # 如果没有重叠就不合并
+        if not mergedList:
+            mergedList.append(interval)
+        # 如果有重叠，返回True，没有则返回False
+        xOverlapJudge = mergedList[-1]['idxRange'][1] > interval['idxRange'][0]
+        yOverlapJudge = mergedList[-1]['priceRange'][1] > interval['priceRange'][0]
+        if not xOverlapJudge and not yOverlapJudge:
+            mergedList.append(interval)
+        elif not xOverlapJudge and yOverlapJudge:
+            mergedList.append(interval)
+        elif xOverlapJudge and yOverlapJudge:
+            # 与最后一个区间合并
+            last = mergedList.pop()
+            new_idx_range = [
+                min(last['idxRange'][0], interval['idxRange'][0]),
+                max(last['idxRange'][1], interval['idxRange'][1])
+            ]
+            new_price_range = [
+                min(last['priceRange'][0], interval['priceRange'][0]),
+                max(last['priceRange'][1], interval['priceRange'][1])
+            ]
+            mergedList.append({'idxRange': new_idx_range, 'priceRange': new_price_range})
+        else:
+            print("特殊情况：X轴重叠但Y轴不重叠")
+    return mergedList
+
+def getNextBigPenDirect(startIdx: int, endIdx: int, bigPenPointList: list):
+    for i, curPenPoint in enumerate(bigPenPointList):
+        if i + 1 > len(bigPenPointList) - 1:
+            continue
+        nextPenPoint = bigPenPointList[i + 1]
+        if curPenPoint['maxMinPriceIdx'] <= startIdx and endIdx <= nextPenPoint['maxMinPriceIdx']:
+            if curPenPoint["type"] == "top":
+                return -1
+            else:
+                return 1
+    return 0
+
+def buildChanCentral(*, penPointList, bigPenPointList):
+    """
+    根据历史价格数据、笔的点位、级别类型构建中枢
+
+    参数:
+
+    histPrice : pd.DataFrame 包含历史价格数据的DataFrame。
+
+    penPointList : list 笔的点位
+
+    bigPenPointList : list 笔的点位
+
+    返回:
+    int
+        由函数计算得出的整数值。
+    """
+    centralList = []
+    for i, curPoint in enumerate(penPointList):
+        if i < 3:
+            continue
+        second2LastPoint = penPointList[i - 1]
+        third2LastPoint = penPointList[i - 2]
+        fourth2LastPoint = penPointList[i - 3]
+        curPointIdx = curPoint["maxMinPriceIdx"]
+        fourth2LastPointIdx = fourth2LastPoint["maxMinPriceIdx"]
+
+        bigDirect = getNextBigPenDirect(fourth2LastPointIdx, curPointIdx, bigPenPointList)
+        if bigDirect == 1:
+            if curPoint["maxMinPrice"] < fourth2LastPoint["maxMinPrice"] and second2LastPoint["maxMinPrice"] > third2LastPoint["maxMinPrice"]:
+                maxminPrice = min(second2LastPoint["maxMinPrice"], fourth2LastPoint["maxMinPrice"])
+                minMaxPrice = max(curPoint["maxMinPrice"], third2LastPoint["maxMinPrice"])
+                centralList.append({
+                    "idxRange": [fourth2LastPoint["maxMinPriceIdx"], curPoint["maxMinPriceIdx"]],
+                    "priceRange": [minMaxPrice, maxminPrice],
+                })
+        if bigDirect == -1:
+            if curPoint["maxMinPrice"] > fourth2LastPoint["maxMinPrice"] and second2LastPoint["maxMinPrice"] < third2LastPoint["maxMinPrice"]:
+                maxminPrice = min(curPoint["maxMinPrice"], third2LastPoint["maxMinPrice"])
+                minMaxPrice = max(second2LastPoint["maxMinPrice"], fourth2LastPoint["maxMinPrice"])
+                centralList.append({
+                    "idxRange": [fourth2LastPoint["maxMinPriceIdx"], curPoint["maxMinPriceIdx"]],
+                    "priceRange": [minMaxPrice, maxminPrice],
+                })
+    return mergeCentralList(centralList)
 
 def MACD(data, fast_period=10, slow_period=20, singal_period=5):
     fastMA = talib.MA(data, fast_period)

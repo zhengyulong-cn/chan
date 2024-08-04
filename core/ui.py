@@ -2,14 +2,6 @@ from pyecharts.charts import Kline
 from pyecharts import options as opts
 import pandas as pd
 
-# 模拟股票数据
-data = [
-    [2320.26, 2302.6, 2287.3, 2362.94],
-    [2300, 2291.3, 2288.26, 2308.38],
-    [2295.35, 2346.5, 2295.35, 2346.92],
-    [2347.22, 2358.98, 2337.35, 2363.8],
-]
-
 class KLineRender:
     kline = Kline(init_opts=opts.InitOpts(
         width="98vw",
@@ -20,11 +12,13 @@ class KLineRender:
     period = ''
     histPrice: pd.DataFrame = None
     chanMarkLine = {}
-    def __init__(self, symbol, histPrice, period, chanMarkLine) -> None:
+    chanCentral = {}
+    def __init__(self, symbol, histPrice, period, chanMarkLine, chanCentral) -> None:
         self.histPrice = histPrice
         self.symbol = symbol
         self.period = period
         self.chanMarkLine = chanMarkLine
+        self.chanCentral = chanCentral
     
     def parseChanMarkLineData(self):
         data = []
@@ -57,6 +51,33 @@ class KLineRender:
             ])
         return data
 
+    def parseChanCentral(self):
+        data = []
+        a0CentralList = self.chanCentral["a0CentralList"]
+        a1CentralList = self.chanCentral["a1CentralList"]
+        for curCentral in a0CentralList:
+            priceRange = [str(x) for x in curCentral["priceRange"]]
+            idxRange = curCentral["idxRange"]
+            data.append(opts.MarkAreaItem(name=f"{idxRange[1] - idxRange[0]}根K线", x=idxRange, y=priceRange, itemstyle_opts=opts.ItemStyleOpts(color="#000000", opacity=0.5)))
+        for curCentral in a1CentralList:
+            priceRange = [str(x) for x in curCentral["priceRange"]]
+            idxRange = curCentral["idxRange"]
+            data.append(opts.MarkAreaItem(name=f"{idxRange[1] - idxRange[0]}根K线", x=idxRange, y=priceRange, itemstyle_opts=opts.ItemStyleOpts(color="#1677ff", opacity=0.5)))
+        return data
+
+    def parseMarkPointData(self):
+        data = []
+        for i in range(len(self.histPrice)):
+            row = self.histPrice.loc[i]
+            if row["a1Direct"] == 1:
+                data.append(
+                    opts.MarkPointItem(symbol="pin", name="Mark", type_="min", coord=[row["datetime"], row["high"]], value=row["a1Direct"])
+                )
+            elif row["a1Direct"] == -1:
+                data.append(
+                    opts.MarkPointItem(symbol="pin", name="Mark", type_="min", coord=[row["datetime"], row["high"]], value=row["a1Direct"], itemstyle_opts=opts.ItemStyleOpts(color="gray"))
+                )
+        return data
 
 
     def draw(self):
@@ -65,10 +86,18 @@ class KLineRender:
         self.kline.add_xaxis(xaxis_data=list(datetimeList))
         self.kline.add_yaxis(series_name="15min K线", y_axis=data, itemstyle_opts=opts.ItemStyleOpts(color="#ec0000"))
         markLineData = self.parseChanMarkLineData()
+        markAreaData = self.parseChanCentral()
+        markPointData = self.parseMarkPointData()
         self.kline.set_series_opts(
             markline_opts=opts.MarkLineOpts(
                 data=markLineData
             ),
+            markarea_opts=opts.MarkAreaOpts(
+                data=markAreaData
+            ),
+            markpoint_opts=opts.MarkPointOpts(
+                data=markPointData
+            )
         )
         self.kline.set_global_opts(
             legend_opts=opts.LegendOpts(is_show=True, pos_bottom=10, pos_left="center"),
@@ -77,7 +106,7 @@ class KLineRender:
                     is_show=False,
                     type_="inside",
                     xaxis_index=[0,1],  # 这里需要修改可缩放的x轴坐标编号
-                    range_start=98,
+                    range_start=0,
                     range_end=100,
                 ),
                 opts.DataZoomOpts(
@@ -85,7 +114,7 @@ class KLineRender:
                     xaxis_index=[0,1],  # 这里需要修改可缩放的x轴坐标编号
                     type_="slider",
                     pos_top="85%",
-                    range_start=98,
+                    range_start=0,
                     range_end=100,
                 ),
             ],
