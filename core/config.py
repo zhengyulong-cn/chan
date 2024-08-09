@@ -8,7 +8,7 @@ FUTURE_INSTRUMENTS = [
     # "FG0",
     # "UR0",
     # "MA0",
-    "AG0",
+    # "AG0",
     # "TA0",
     # "SP0",
     # "V0",
@@ -17,6 +17,7 @@ FUTURE_INSTRUMENTS = [
     # "RM0",
     # "FU0",
     # "SR0",
+    "I0",
 ]
 
 class KLineLevel(Enum):

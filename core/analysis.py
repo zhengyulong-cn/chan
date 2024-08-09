@@ -3,6 +3,9 @@ import pandas as pd
 import talib
 from typing import List
 
+def getMA(histPrice: pd.DataFrame, *, stage: int):
+    return talib.MA(histPrice["close"], stage)
+
 def getOperateDirection(histPrice: pd.DataFrame, *, stage: int, offset: int):
     """
     获取当前均线方向
@@ -187,6 +190,39 @@ def buildChanCentral(*, penPointList, bigPenPointList):
                     "priceRange": [minMaxPrice, maxminPrice],
                 })
     return mergeCentralList(centralList)
+
+def buildChanBuyingSellingPoints(*, penPointList, centralList, bigPenPointList):
+    buyingSellingPointsList = []
+    for i, bigPenPoint in enumerate(bigPenPointList):
+        if i + 1 > len(bigPenPointList) - 1:
+            continue
+        nextBigPenPoint = bigPenPointList[i + 1]
+        bigStartIdx = bigPenPoint["maxMinPriceIdx"]
+        bigEndIdx = nextBigPenPoint["maxMinPriceIdx"]
+        bigDirect = 1 if nextBigPenPoint["type"] == "top" else -1
+        intervalList = []
+        for curPoint in penPointList:
+            curIdx = curPoint["maxMinPriceIdx"]
+            curPrice = curPoint["maxMinPrice"]
+            curType = curPoint["type"]
+            if bigStartIdx <= curIdx and curIdx <= bigEndIdx:
+                if bigDirect == 1 and curType == "buttom":
+                    if not intervalList:
+                        intervalList.append({ "type": 1, "label": "一买", "maxMinPriceIdx": curIdx, "maxMinPrice": curPrice, "datetime":  curPoint["datetime"]})
+                    elif len(intervalList) == 1:
+                        intervalList.append({ "type": 2, "label": "二买", "maxMinPriceIdx": curIdx, "maxMinPrice": curPrice, "datetime":  curPoint["datetime"]})
+                    else:
+                        intervalList.append({ "type": 3, "label": "三买", "maxMinPriceIdx": curIdx, "maxMinPrice": curPrice, "datetime":  curPoint["datetime"]})
+                if bigDirect == -1 and curType == "top":
+                    if not intervalList:
+                        intervalList.append({ "type": -1, "label": "一卖", "maxMinPriceIdx": curIdx, "maxMinPrice": curPrice, "datetime":  curPoint["datetime"]})
+                    elif len(intervalList) == 1:
+                        intervalList.append({ "type": -2, "label": "二卖", "maxMinPriceIdx": curIdx, "maxMinPrice": curPrice, "datetime":  curPoint["datetime"]})
+                    else:
+                        intervalList.append({ "type": -3, "label": "三卖", "maxMinPriceIdx": curIdx, "maxMinPrice": curPrice, "datetime":  curPoint["datetime"]})
+        buyingSellingPointsList.append(intervalList)
+    return buyingSellingPointsList
+
 
 def MACD(data, fast_period=10, slow_period=20, singal_period=5):
     fastMA = talib.MA(data, fast_period)

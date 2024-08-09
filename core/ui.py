@@ -6,19 +6,21 @@ class KLineRender:
     kline = Kline(init_opts=opts.InitOpts(
         width="98vw",
         height="95vh",
-        renderer="svg"
+        renderer="svg",
     ))
     symbol = ''
     period = ''
     histPrice: pd.DataFrame = None
     chanMarkLine = {}
     chanCentral = {}
-    def __init__(self, symbol, histPrice, period, chanMarkLine, chanCentral) -> None:
+    chanBuyingSellingPoint = {}
+    def __init__(self, symbol, histPrice, period, chanMarkLine, chanCentral, chanBuyingSellingPoint) -> None:
         self.histPrice = histPrice
         self.symbol = symbol
         self.period = period
         self.chanMarkLine = chanMarkLine
         self.chanCentral = chanCentral
+        self.chanBuyingSellingPoint = chanBuyingSellingPoint
     
     def parseChanMarkLineData(self):
         data = []
@@ -65,18 +67,22 @@ class KLineRender:
             data.append(opts.MarkAreaItem(name=f"{idxRange[1] - idxRange[0]}根K线", x=idxRange, y=priceRange, itemstyle_opts=opts.ItemStyleOpts(color="#1677ff", opacity=0.5)))
         return data
 
-    def parseMarkPointData(self):
+    def parseChanBuyingSellingPoints(self):
+        a0BuyingSellingPointList = self.chanBuyingSellingPoint["a0BuyingSellingPointList"]
         data = []
-        for i in range(len(self.histPrice)):
-            row = self.histPrice.loc[i]
-            if row["a1Direct"] == 1:
-                data.append(
-                    opts.MarkPointItem(symbol="pin", name="Mark", type_="min", coord=[row["datetime"], row["high"]], value=row["a1Direct"])
-                )
-            elif row["a1Direct"] == -1:
-                data.append(
-                    opts.MarkPointItem(symbol="pin", name="Mark", type_="min", coord=[row["datetime"], row["high"]], value=row["a1Direct"], itemstyle_opts=opts.ItemStyleOpts(color="gray"))
-                )
+        # data.append(
+        #     opts.MarkPointItem(symbol="pin", name="Mark", type_="min", coord=["2024-07-23 15:00:00", 7525.0], value="Mark", itemstyle_opts=opts.ItemStyleOpts(color="red", area_color="black"))
+        # )
+        for intervalList in a0BuyingSellingPointList:
+            for point in intervalList:
+                if point["type"] > 0:
+                    data.append(
+                        opts.MarkPointItem(symbol="pin", name="买卖点", coord=[point["datetime"], point["maxMinPrice"]], value=point["label"], itemstyle_opts=opts.ItemStyleOpts(color="red", area_color="black"))
+                    )
+                else:
+                    data.append(
+                        opts.MarkPointItem(symbol="pin", name="买卖点", coord=[point["datetime"], point["maxMinPrice"]], value=point["label"], itemstyle_opts=opts.ItemStyleOpts(color="blue", area_color="black"))
+                    )
         return data
 
 
@@ -87,7 +93,7 @@ class KLineRender:
         self.kline.add_yaxis(series_name="15min K线", y_axis=data, itemstyle_opts=opts.ItemStyleOpts(color="#ec0000"))
         markLineData = self.parseChanMarkLineData()
         markAreaData = self.parseChanCentral()
-        markPointData = self.parseMarkPointData()
+        markPointData = self.parseChanBuyingSellingPoints()
         self.kline.set_series_opts(
             markline_opts=opts.MarkLineOpts(
                 data=markLineData
@@ -100,6 +106,7 @@ class KLineRender:
             )
         )
         self.kline.set_global_opts(
+            title_opts=opts.TitleOpts(title=f"{self.symbol} {self.period}min"),
             legend_opts=opts.LegendOpts(is_show=True, pos_bottom=10, pos_left="center"),
             datazoom_opts=[
                 opts.DataZoomOpts(
